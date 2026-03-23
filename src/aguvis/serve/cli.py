@@ -1,11 +1,12 @@
 import argparse
+import importlib.util
 from io import BytesIO
+from typing import Any
 from typing import List, Literal, Optional
 
 import requests
 from PIL import Image
 from qwen_vl_utils import process_vision_info
-from transformers import Qwen2VLForConditionalGeneration, Qwen2VLProcessor
 
 from aguvis.constants import agent_system_message, chat_template, grounding_system_message, until, user_instruction
 
@@ -19,8 +20,37 @@ def load_image(image_file):
     return image
 
 
-def load_pretrained_model(model_path):
-    model = Qwen2VLForConditionalGeneration.from_pretrained(model_path)
+def _load_transformers_qwen2vl():
+    """Avoid importing DeepSpeed for inference-only model loading."""
+    original_find_spec = importlib.util.find_spec
+
+    def patched_find_spec(name, *args, **kwargs):
+        if name == "deepspeed":
+            return None
+        return original_find_spec(name, *args, **kwargs)
+
+    importlib.util.find_spec = patched_find_spec
+    try:
+        from transformers import Qwen2VLForConditionalGeneration, Qwen2VLProcessor
+    finally:
+        importlib.util.find_spec = original_find_spec
+
+    return Qwen2VLForConditionalGeneration, Qwen2VLProcessor
+
+
+def load_pretrained_model(
+    model_path: str,
+    attn_implementation: Optional[str] = None,
+    torch_dtype: Optional[Any] = None,
+):
+    Qwen2VLForConditionalGeneration, Qwen2VLProcessor = _load_transformers_qwen2vl()
+    model_kwargs = {}
+    if attn_implementation is not None:
+        model_kwargs["attn_implementation"] = attn_implementation
+    if torch_dtype is not None:
+        model_kwargs["torch_dtype"] = torch_dtype
+
+    model = Qwen2VLForConditionalGeneration.from_pretrained(model_path, **model_kwargs)
     processor = Qwen2VLProcessor.from_pretrained(model_path)
     tokenizer = processor.tokenizer
     return model, processor, tokenizer
@@ -97,7 +127,10 @@ def generate_response(
 
 
 def main(args):
-    model, processor, tokenizer = load_pretrained_model(args.model_path)
+    model, processor, tokenizer = load_pretrained_model(
+        args.model_path,
+        attn_implementation="flash_attention_2" if args.device == "cuda" else "eager",
+    )
     model.to(args.device)
     model.tie_weights()
     image = load_image(args.image_path)

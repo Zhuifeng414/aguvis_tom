@@ -9,6 +9,7 @@ dependencies = [
     "pre-commit>=3.7.1",
     "pip>=24.1.1",
     "Pillow>=10.4.0",
+    "PyYAML>=6.0.2",
     "liger-kernel==0.5.2",
     "opencv-python-headless>=4.10.0.84",
     "accelerate==1.1.1",
@@ -16,6 +17,7 @@ dependencies = [
     "deepspeed==0.16.0",
     "transformers==4.47.1",
     "flash-attn",
+    "requests>=2.32.3",
     "wandb==0.18.3"
 ]
 requires-python = ">=3.10,<3.13"

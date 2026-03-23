@@ -1,0 +1,25 @@
+name: aguvis-inference
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip>=24.1
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - jupyterlab
+  - ipykernel
+  - pillow>=10.4.0
+  - pyyaml>=6.0.2
+  - requests>=2.32.3
+  - pip:
+      - accelerate==1.1.1
+      - einops>=0.8.0
+      - opencv-python-headless>=4.10.0.84
+      - qwen-vl-utils==0.0.8
+      - safetensors>=0.4.5
+      - sentencepiece>=0.2.0
+      - transformers==4.47.1
