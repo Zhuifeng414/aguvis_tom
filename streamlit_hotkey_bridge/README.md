@@ -13,13 +13,13 @@ This folder adds a separate workflow on top of the existing `streamlit_ui/` app 
 Start the upload API from the repo root:
 
 ```bash
-python streamlit_hotkey_bridge/upload_server.py --host 0.0.0.0 --port 8765
+python streamlit_hotkey_bridge/upload_server.py --host 0.0.0.0 --port 8765 &
 ```
 
 Start the Streamlit UI variant from the repo root:
 
 ```bash
-streamlit run streamlit_hotkey_bridge/app.py
+streamlit run streamlit_hotkey_bridge/app.py &
 ```
 
 Uploaded screenshots are stored in `streamlit_hotkey_bridge/uploads/`.
@@ -36,6 +36,8 @@ Run the hotkey listener and point it at your server:
 
 ```bash
 python streamlit_hotkey_bridge/local_hotkey_client.py --server-url http://YOUR_SERVER_IP:8765
+
+python streamlit_hotkey_bridge/local_hotkey_client.py --server-url http://localhost:8766
 ```
 
 Now type `kk` on your local computer. The script will:
