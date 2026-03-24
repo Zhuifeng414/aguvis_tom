@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -21,10 +22,12 @@ from aguvis_remote_bridge.common import (
     DEFAULT_INSTRUCTION,
     LATEST_RESULT_PATH,
     LOCAL_CAPTURE_DIR,
+    LOCAL_RESULTS_DIR,
     SETTINGS_PATH,
     STREAMLIT_UI_ROOT,
     atomic_write_json,
     default_settings,
+    encode_image_file,
     ensure_local_state_dirs,
     latest_file_token,
     load_json,
@@ -39,6 +42,14 @@ from visualization import render_action_visualization
 
 Mode = Literal["self-plan", "force-plan", "grounding"]
 RESULT_WATCH_INTERVAL = "2s"
+INFERENCE_REQUEST_TIMEOUT_SECONDS = 120.0
+
+
+def normalize_infer_url(server_url: str) -> str:
+    cleaned = server_url.rstrip("/")
+    if cleaned.endswith("/infer"):
+        return cleaned
+    return f"{cleaned}/infer"
 
 
 def normalize_health_url(server_url: str) -> str:
@@ -52,15 +63,75 @@ def load_latest_result() -> dict[str, Any] | None:
     return load_json(LATEST_RESULT_PATH)
 
 
-def load_display_image(latest_result: dict[str, Any] | None) -> tuple[Image.Image, str]:
+def resolve_display_image_path(latest_result: dict[str, Any] | None) -> Path:
     if latest_result:
         image_path_value = latest_result.get("image_path")
         if isinstance(image_path_value, str) and image_path_value:
             image_path = Path(image_path_value)
             if image_path.exists():
-                return Image.open(image_path).convert("RGB"), f"latest local screenshot: {image_path}"
+                return image_path
+    return DEFAULT_IMAGE_PATH
 
-    return Image.open(DEFAULT_IMAGE_PATH).convert("RGB"), f"default sample: {DEFAULT_IMAGE_PATH}"
+
+def load_display_image(latest_result: dict[str, Any] | None) -> tuple[Image.Image, str]:
+    image_path = resolve_display_image_path(latest_result)
+    if image_path == DEFAULT_IMAGE_PATH:
+        return Image.open(DEFAULT_IMAGE_PATH).convert("RGB"), f"default sample: {DEFAULT_IMAGE_PATH}"
+    return Image.open(image_path).convert("RGB"), f"latest local screenshot: {image_path}"
+
+
+def persist_result_record(result_record: dict[str, Any], timestamp: str) -> None:
+    result_path = LOCAL_RESULTS_DIR / f"result_{timestamp}.json"
+    atomic_write_json(result_path, result_record)
+    atomic_write_json(LATEST_RESULT_PATH, result_record)
+
+
+def submit_current_image_for_inference(
+    server_url: str,
+    current_settings: dict[str, Any],
+    image_path: Path,
+) -> dict[str, Any]:
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    captured_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    request_payload = {
+        "title": current_settings.get("title"),
+        "instruction": current_settings.get("instruction"),
+        "mode": current_settings.get("mode"),
+        "previous_actions": current_settings.get("previous_actions"),
+        "low_level_instruction": current_settings.get("low_level_instruction"),
+        "temperature": current_settings.get("temperature", 0.0),
+        "max_new_tokens": current_settings.get("max_new_tokens", 512),
+        "filename": image_path.name,
+        "image_base64": encode_image_file(image_path),
+    }
+    infer_url = normalize_infer_url(server_url)
+
+    try:
+        response = requests.post(infer_url, json=request_payload, timeout=INFERENCE_REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        server_payload = response.json()
+        result_record = {
+            "status": "ok",
+            "captured_at": captured_at,
+            "image_path": str(image_path),
+            "server_url": infer_url,
+            "request": request_payload | {"image_base64": "<omitted>"},
+            "response_text": server_payload.get("result", ""),
+            "server_payload": server_payload,
+        }
+    except Exception as exc:
+        result_record = {
+            "status": "error",
+            "captured_at": captured_at,
+            "image_path": str(image_path),
+            "server_url": infer_url,
+            "request": request_payload | {"image_base64": "<omitted>"},
+            "response_text": "",
+            "error": str(exc),
+        }
+
+    persist_result_record(result_record, timestamp)
+    return result_record
 
 
 @st.cache_data(show_spinner=False, ttl=5)
@@ -96,7 +167,8 @@ def main() -> None:
     st.title("AGUVIS Remote Bridge")
     st.caption(
         "Run AGUVIS inference on the Linux server, keep this Streamlit app on the local computer, "
-        "and refresh the latest screenshot and response whenever the hotkey client captures `kk`."
+        "and refresh the latest screenshot and response whenever the hotkey client captures `kk` "
+        "or the manual submit button sends the current image."
     )
 
     saved_settings = default_settings()
@@ -166,6 +238,7 @@ def main() -> None:
 
     latest_result = load_latest_result()
     current_image, image_source_label = load_display_image(latest_result)
+    request_image_path = resolve_display_image_path(latest_result)
     current_result_token = latest_file_token(LATEST_RESULT_PATH)
     latest_response_text = ""
     if latest_result and isinstance(latest_result.get("response_text"), str):
@@ -203,10 +276,26 @@ def main() -> None:
 
         st.subheader("Current Request Settings")
         st.json(current_settings)
+        st.caption(f"Manual send will use image: `{request_image_path}`")
+        if st.button("Send Current Image To Backend", type="primary", use_container_width=True):
+            with st.spinner("Sending request to backend..."):
+                result_record = submit_current_image_for_inference(
+                    server_url=str(current_settings["server_url"]),
+                    current_settings=current_settings,
+                    image_path=request_image_path,
+                )
+            if result_record.get("status") == "ok":
+                st.success("Backend response received. Refreshing UI.")
+            else:
+                st.error(f"Backend request failed: {result_record.get('error', 'Unknown error')}")
+            st.rerun()
 
         st.subheader("Backend Result")
         if latest_result is None:
-            st.info("Run the local hotkey client and type `kk` to capture a screenshot and request inference.")
+            st.info(
+                "Send the current image with the button above, or run the local hotkey client and type `kk` "
+                "to capture a screenshot and request inference."
+            )
         elif latest_result.get("status") == "error":
             st.error(str(latest_result.get("error", "Unknown error")))
         else:

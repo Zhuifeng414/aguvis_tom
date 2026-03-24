@@ -1,0 +1,12 @@
+{
+  "duration_seconds": 2.737,
+  "instruction": "Tap the Notifications option.",
+  "low_level_instruction": "Tap the Notifications option",
+  "mode": "grounding",
+  "previous_actions": null,
+  "result": "assistantos\npyautogui.click(x=0.6375, y=0.1425)",
+  "saved_image_path": "/home/tuq24452/code/GUIAgent/aguvis/aguvis_remote_bridge/server_state/uploads/screenshot_20260323-223828_412b5b68.png",
+  "server_time": "2026-03-23 22:38:32",
+  "status": "ok",
+  "title": "Example 4: grounding mode"
+}

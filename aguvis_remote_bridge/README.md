@@ -9,7 +9,7 @@ This folder creates the split workflow requested in `task/todo/5_back_server_fro
 2. `local_hotkey_client.py` runs on the local computer, listens for the `kk` key sequence, saves a screenshot, and
    sends it to the remote backend.
 3. `app.py` runs as a local Streamlit UI, watches the newest local result JSON, and displays both the screenshot and
-   the backend response.
+   the backend response. It can also send the currently displayed image directly to the backend from a button in the UI.
 
 ## Server side
 
@@ -89,9 +89,10 @@ python aguvis_remote_bridge/local_hotkey_client.py --server-url http://YOUR_SERV
 
 1. Open the local Streamlit app.
 2. Configure the request fields in the sidebar.
-3. Start `local_hotkey_client.py`.
-4. Type `kk` on the local computer.
-5. The client saves a local `.png`, uploads it to the Linux server, waits for inference, then writes the newest result
+3. Either click `Send Current Image To Backend` in the UI, or start `local_hotkey_client.py`.
+4. If you started the hotkey client, type `kk` on the local computer.
+5. The direct UI button sends the currently displayed image, while the hotkey client saves a local `.png`, uploads it
+   to the Linux server, waits for inference, then writes the newest result
    into `aguvis_remote_bridge/local_state/latest_result.json`.
 6. The Streamlit app auto-refreshes and shows:
    - the newest screenshot
