@@ -52,6 +52,15 @@ Start the local Streamlit UI:
 streamlit run aguvis_remote_bridge/app.py
 ```
 
+This repo sets the default Streamlit port to `8502` in `.streamlit/config.toml` to avoid conflicts with apps that
+already use `8501`.
+
+If you need a different port for a specific run, override it explicitly:
+
+```bash
+streamlit run aguvis_remote_bridge/app.py --server.port 8510
+```
+
 In the Streamlit sidebar, set `Server URL` to your Linux server, for example:
 
 ```text
